@@ -92,7 +92,6 @@ INDEX_TEMPLATE = """
 
         .hidden { display: none !important; }
         
-        /* Interactive Inputs & Button Standardization */
         input, select, button {
             width: 100%; min-height: 48px; padding: 12px; margin: 8px 0;
             border-radius: 8px; border: 1px solid var(--border-color);
@@ -104,11 +103,9 @@ INDEX_TEMPLATE = """
         }
         button:active { opacity: 0.8; }
 
-        /* Auth Container */
         #auth-container { max-width: 420px; margin: 10% auto; padding: 30px; }
         .card { background-color: var(--bg-primary); border-radius: 14px; box-shadow: var(--card-shadow); padding: 24px; }
 
-        /* Responsive Cross-Platform Layout Navigation */
         header {
             position: sticky; top: 0; z-index: 100;
             background-color: var(--bg-primary); padding: 12px 24px;
@@ -119,7 +116,6 @@ INDEX_TEMPLATE = """
         .mini-p { font-size: 32px; font-weight: 900; color: var(--text-main); margin: 0; line-height: 1; }
         .mini-dot { width: 8px; height: 8px; background-color: var(--accent-red); border-radius: 50%; margin: -2px auto 0 auto; }
 
-        /* Adaptive Flex/Grid Container */
         .dashboard-grid {
             max-width: 1200px; margin: 24px auto;
             display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -128,13 +124,12 @@ INDEX_TEMPLATE = """
         .flex-box { cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; border: 1px solid transparent; }
         .flex-box:hover { transform: translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.1); border-color: var(--border-color); }
 
-        /* Professional Overlay Window Systems */
         .modal {
             position: fixed; top:0; left:0; width:100vw; height:100vh;
             background: rgba(0,0,0,0.45); backdrop-filter: blur(4px);
             display: flex; justify-content: center; align-items: flex-end; z-index: 1000;
         }
-        @media (min-width: 768px) { .modal { align-items: center; } } /* Centered on Desktops, Bottom-sheet on Mobile */
+        @media (min-width: 768px) { .modal { align-items: center; } }
 
         .modal-content {
             background: var(--bg-primary); padding: 24px;
@@ -142,17 +137,15 @@ INDEX_TEMPLATE = """
             width: 100%; max-height: 85vh; overflow-y: auto; position: relative;
         }
         @media (min-width: 768px) {
-            .modal-content { border-radius: 16px; max-width: 650px; width: 90%; max-height: 80vh; }
+            .modal-content { border-radius: 16px; max-width: 750px; width: 95%; max-height: 80vh; }
         }
 
         .close-modal { position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; opacity: 0.6; }
 
-        /* High-Density Data Tables */
         .table-responsive { width: 100%; overflow-x: auto; margin-top: 16px; border-radius: 8px; border: 1px solid var(--border-color); }
         table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
-        th, td { padding: 14px; border-bottom: 1px solid var(--border-color); min-width: 100px; }
+        th, td { padding: 14px; border-bottom: 1px solid var(--border-color); min-width: 110px; }
         th { background-color: var(--bg-secondary); font-weight: 600; position: sticky; top: 0; }
-        tr:last-child { font-weight: bold; background-color: var(--bg-secondary); }
         
         .action-group { display: flex; gap: 8px; flex-wrap: wrap; }
         .action-group button { width: auto; min-height: 38px; padding: 6px 14px; font-size: 14px; margin: 0; }
@@ -168,15 +161,15 @@ INDEX_TEMPLATE = """
     <div id="auth-container" class="card hidden">
         <h2 id="auth-title" style="margin-top:0;">Account Access</h2>
         <form id="auth-form">
-            <input type="text" id="username" placeholder="Username" required autocomplete="username">
-            <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
+            <input type="text" id="username" placeholder="Username" required>
+            <input type="password" id="password" placeholder="Password" required>
             <button type="submit" style="margin-top:16px;">Log In</button>
         </form>
     </div>
 
     <div id="main-app" class="hidden">
         <header>
-            <button class="profile-btn" onclick="openSettings()" aria-label="System Settings">
+            <button class="profile-btn" onclick="openSettings()">
                 <div class="mini-p">P</div>
                 <div class="mini-dot"></div>
             </button>
@@ -218,9 +211,6 @@ INDEX_TEMPLATE = """
                 <input type="password" id="new-password" placeholder="New Password" required>
                 <button type="submit" style="background-color:var(--accent-blue); color:white;">Save Security Data</button>
             </form>
-
-            <h4 style="margin:20px 0 4px 0;">Biometric Fingerprint Sandbox</h4>
-            <button onclick="alert('WebAuthn local credential link updated.')" style="background-color:var(--bg-secondary); color:var(--text-main); border:1px solid var(--border-color);">Re-link Hardware Keys</button>
             
             <h3 style="color:var(--accent-red); margin:24px 0 8px 0;">🗑️ Archive Storage Recovery Trash</h3>
             <div id="trash-list-container"></div>
@@ -280,7 +270,7 @@ INDEX_TEMPLATE = """
                 return;
             }
             let html = "<div class='table-responsive'><table><tr><th>Profile Name</th><th>Deletion Timestamp</th></tr>";
-            records.forEach(r => { html += `<tr><td>\${r.name}</td><td>\${r.deleted_at}</td></tr>`; });
+            records.forEach(r => { html += "<tr><td>" + r.name + "</td><td>" + r.deleted_at + "</td></tr>"; });
             html += "</table></div>";
             container.innerHTML = html;
         }
@@ -314,25 +304,28 @@ INDEX_TEMPLATE = """
         async function openFlex1() {
             const res = await fetch('/api/get-customers');
             const users = await res.json();
-            let html = `<span class="close-modal" onclick="closeElement('action-modal')">&times;</span>
-                <h2 style="margin-top:0;">📅 Daily Input Matrix</h2>
-                <div class='table-responsive'>
-                <table><tr><th>Customer Profile</th><th>Action Route</th></tr>`;
+            const todayDate = new Date().toISOString().split('T')[0];
+            
+            let html = '<span class="close-modal" onclick="closeElement(\\'action-modal\\')">&times;</span>' +
+                '<h2 style="margin-top:0;">📅 Daily Input Matrix</h2>' +
+                '<h4 style="color:var(--accent-blue); margin-top:0;">Collection Date: ' + todayDate + '</h4>' +
+                '<div class="table-responsive">' +
+                '<table><tr><th>Customer Profile</th><th>Action Route</th></tr>';
             
             users.forEach(u => {
-                html += `<tr>
-                    <td><strong>\${u.name}</strong><br><span style='font-size:12px; opacity:0.6;'>\${u.phone || 'No Phone Link'}</span></td>
-                    <td><button style='width:auto; min-height:36px; padding:6px 12px; font-size:14px; margin:0; background-color:var(--accent-blue); color:white;' onclick="launchPaymentPopup(\${u.customer_id}, '\${u.name}')">Collect</button></td>
-                </tr>`;
+                let phoneDisplay = u.phone ? u.phone : 'No Phone Link';
+                html += '<tr>' +
+                    '<td><strong>' + u.name + '</strong><br><span style="font-size:12px; opacity:0.6;">' + phoneDisplay + '</span></td>' +
+                    '<td><button style="width:auto; min-height:36px; padding:6px 12px; font-size:14px; margin:0; background-color:var(--accent-blue); color:white;" onclick="launchPaymentPopup(' + u.customer_id + ', \\'' + u.name + '\\')">Collect</button></td>' +
+                '</tr>';
             });
-            html += `</table></div>`;
-            const modal = document.getElementById('action-modal');
+            html += '</table></div>';
             document.getElementById('action-modal-body').innerHTML = html;
-            modal.classList.remove('hidden');
+            document.getElementById('action-modal').classList.remove('hidden');
         }
 
         function launchPaymentPopup(id, name) {
-            const amt = prompt(`Enter modern ledger payment amount for \${name}:`, "100");
+            const amt = prompt("Enter modern ledger payment amount for " + name + ":", "100");
             if (amt === null || amt.trim() === "") return;
             const mode = prompt("Specify Processing Channel (Cash / UPI / Bank):", "Cash");
             if (mode === null || mode.trim() === "") return;
@@ -348,7 +341,7 @@ INDEX_TEMPLATE = """
                     alert("Collection baseline array posted successfully.");
                     openFlex1();
                 } else if(data.require_bio) {
-                    if(confirm("Immutable lock structural breach! An entry already exists for today.\\n\\nScan biometric system configuration profile to verify modification?")) {
+                    if(confirm("An entry already exists for today! Scan fingerprint simulation to override?")) {
                         fetch('/api/post-collection-override', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
@@ -365,32 +358,31 @@ INDEX_TEMPLATE = """
         async function openFlex2() {
             const res = await fetch('/api/get-customers');
             const users = await res.json();
-            let html = `<span class="close-modal" onclick="closeElement('action-modal')">&times;</span>
-                <h2 style="margin-top:0;">👥 Customer Registry Engine</h2>
-                <div class="card" style="box-shadow:none; border:1px solid var(--border-color); margin-bottom:16px; padding:16px;">
-                    <h4 style='margin-top:0; margin-bottom:8px;'>Provision New Active Account</h4>
-                    <input type="text" id="c-name" placeholder="Full Name Identifier">
-                    <input type="tel" id="c-phone" placeholder="Phone Data String">
-                    <button style='background-color:var(--accent-green); color:white;' onclick="submitNewCustomer()">Provision Profile</button>
-                </div>
-                <div class='table-responsive'>
-                <table><tr><th>Active Core Listings</th><th>Management Options</th></tr>`;
+            let html = '<span class="close-modal" onclick="closeElement(\\'action-modal\\')">&times;</span>' +
+                '<h2 style="margin-top:0;">👥 Customer Registry Engine</h2>' +
+                '<div class="card" style="box-shadow:none; border:1px solid var(--border-color); margin-bottom:16px; padding:16px;">' +
+                    '<h4 style="margin-top:0; margin-bottom:8px;">Provision New Active Account</h4>' +
+                    '<input type="text" id="c-name" placeholder="Full Name Identifier">' +
+                    '<input type="tel" id="c-phone" placeholder="Phone Data String">' +
+                    '<button style="background-color:var(--accent-green); color:white;" onclick="submitNewCustomer()">Provision Profile</button>' +
+                '</div>' +
+                '<div class="table-responsive">' +
+                '<table><tr><th>Active Core Listings</th><th>Management Options</th></tr>';
             
             users.forEach(u => {
-                html += `<tr>
-                    <td><strong>\${u.name}</strong><br><span style='font-size:12px; opacity:0.6;'>\${u.phone}</span></td>
-                    <td>
-                        <div class='action-group'>
-                            <button style="background-color:var(--bg-secondary); color:var(--text-main); border:1px solid var(--border-color);" onclick="editCustomer(\${u.customer_id}, '\${u.name}', '\${u.phone}')">Modify</button>
-                            <button style="background-color:var(--accent-red); color:white;" onclick="deleteCustomer(\${u.customer_id}, '\${u.name}')">Delete</button>
-                        </div>
-                    </td>
-                </tr>`;
+                html += '<tr>' +
+                    '<td><strong>' + u.name + '</strong><br><span style="font-size:12px; opacity:0.6;">' + u.phone + '</span></td>' +
+                    '<td>' +
+                        '<div class="action-group">' +
+                            '<button style="background-color:var(--bg-secondary); color:var(--text-main); border:1px solid var(--border-color);" onclick="editCustomer(' + u.customer_id + ', \\'' + u.name + '\\', \\'' + u.phone + '\\')">Modify</button>' +
+                            '<button style="background-color:var(--accent-red); color:white;" onclick="deleteCustomer(' + u.customer_id + ', \\'' + u.name + '\\')">Delete</button>' +
+                        '</div>' +
+                    '</td>' +
+                '</tr>';
             });
-            html += `</table></div>`;
-            const modal = document.getElementById('action-modal');
+            html += '</table></div>';
             document.getElementById('action-modal-body').innerHTML = html;
-            modal.classList.remove('hidden');
+            document.getElementById('action-modal').classList.remove('hidden');
         }
 
         async function submitNewCustomer() {
@@ -418,7 +410,7 @@ INDEX_TEMPLATE = """
         }
 
         async function deleteCustomer(id, name) {
-            if(confirm(`Completely isolate and archive data arrays for \${name}?\\nOperational view parameters will clear immediately.`)) {
+            if(confirm("Completely isolate and archive data arrays for " + name + "?")) {
                 await fetch('/api/delete-customer', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -432,45 +424,47 @@ INDEX_TEMPLATE = """
         async function openFlex3() {
             const res = await fetch('/api/get-matrix');
             const data = await res.json();
+            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            const currentMonthName = monthNames[new Date().getMonth()];
+            const currentYear = new Date().getFullYear();
             
-            let html = `<span class="close-modal" onclick="closeElement('action-modal')">&times;</span>
-                <h2 style="margin-top:0;">📊 Monthly Balance Engine Grid</h2>
-                <div class='table-responsive'>
-                <table id="matrix-table"><thead><tr>`;
+            let html = '<span class="close-modal" onclick="closeElement(\\'action-modal\\')">&times;</span>' +
+                '<h2 style="margin-top:0;">📊 Balance Matrix Overview (' + currentMonthName + ' ' + currentYear + ')</h2>' +
+                '<div class="table-responsive">' +
+                '<table id="matrix-table"><thead><tr>';
             
             if(data.columns.length === 0) {
-                html += "<th>No historical calculations registered to the production framework.</th></tr></thead></table></div>";
+                html += "<th>No active data profiles registered to the framework.</th></tr></thead></table></div>";
                 document.getElementById('action-modal-body').innerHTML = html;
                 return;
             }
 
-            data.columns.forEach(col => { html += `<th>\${col}</th>`; });
+            data.columns.forEach(col => { html += "<th>" + col + "</th>"; });
             html += "</tr></thead><tbody>";
 
             data.data.forEach((row, index) => {
                 let isLast = (index === data.data.length - 1);
                 html += isLast ? "<tr style='font-weight:bold; background-color:var(--bg-secondary);'>" : "<tr>";
-                row.forEach(val => { html += `<td>\${val ?? 0}</td>`; });
+                row.forEach(val => { html += "<td>" + (val !== null ? val : 0) + "</td>"; });
                 html += "</tr>";
             });
 
-            html += `</tbody></table></div>
-                <div style="margin-top:20px; display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-                    <button onclick="window.location.href='/api/export-excel'" style="background-color:var(--accent-green); color:white; margin:0;">Excel Spreadsheet</button>
-                    <button onclick="exportToPDF()" style="background-color:var(--accent-red); color:white; margin:0;">Print PDF Report</button>
-                </div>`;
+            html += '</tbody></table></div>' +
+                '<div style="margin-top:20px; display:grid; grid-template-columns: 1fr 1fr; gap:12px;">' +
+                    '<button onclick="window.location.href=\\'/api/export-excel\\'" style="background-color:var(--accent-green); color:white; margin:0;">Excel Spreadsheet</button>' +
+                    '<button onclick="exportToPDF(\\'' + currentMonthName + '\\', ' + currentYear + ')" style="background-color:var(--accent-red); color:white; margin:0;">Print PDF Report</button>' +
+                '</div>';
             
-            const modal = document.getElementById('action-modal');
             document.getElementById('action-modal-body').innerHTML = html;
-            modal.classList.remove('hidden');
+            document.getElementById('action-modal').classList.remove('hidden');
         }
 
-        function exportToPDF() {
+        function exportToPDF(month, year) {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('l', 'pt', 'a4');
-            doc.text("Pigmi Ledger Analytics - Financial Computation Document", 40, 30);
+            doc.text("Pigmi Ledger Analytics - " + month + " " + year, 40, 30);
             doc.autoTable({ html: '#matrix-table', styles: { fontSize: 10 }, marginTop: 50 });
-            doc.save(`Pigmi_Production_Ledger_\${new Date().toISOString().split('T')[0]}.pdf`);
+            doc.save("Pigmi_Ledger_" + month + "_" + year + ".pdf");
         }
     </script>
 </body>
@@ -582,7 +576,7 @@ def post_collection_override():
     c.execute("UPDATE collections SET amount=?, mode=? WHERE customer_id=? AND date=?",
               (float(data['amount']), data['mode'], data['id'], today))
     conn.commit(); conn.close()
-    return jsonify({"success": True, "msg": "Biometric hardware signature matches. Lock overridden."})
+    return jsonify({"success": True, "msg": "Biometric simulation validated. Record updated."})
 
 def build_pandas_matrix():
     import pandas as pd
@@ -607,21 +601,21 @@ def build_pandas_matrix():
     matrix = pd.concat([matrix, pd.DataFrame([total_row])], ignore_index=True)
     return matrix
 
-@app.route('/api/get-matrix')
-def get_matrix_json():
-    df = build_pandas_matrix()
-    if df.empty: return jsonify({"columns": [], "data": []})
-    return jsonify({"columns": list(df.columns), "data": df.values.tolist()})
-
 @app.route('/api/export-excel')
 def export_excel():
     import io; from flask import send_file
     df = build_pandas_matrix()
+    current_month_str = datetime.now().strftime("%B_%Y")
     output = io.BytesIO()
     with io.BytesIO() as output:
-        if not df.empty: df.to_excel(output, index=False, sheet_name='Pigmi Monthly Ledger')
+        if not df.empty: df.to_excel(output, index=False, sheet_name='Pigmi Ledger')
         output.seek(0)
-        return send_file(io.BytesIO(output.read()), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="Pigmi_Ledger.xlsx")
+        return send_file(
+            io.BytesIO(output.read()), 
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+            as_attachment=True, 
+            download_name=f"Pigmi_Ledger_{current_month_str}.xlsx"
+        )
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
