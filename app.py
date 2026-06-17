@@ -1,12 +1,17 @@
 import os
 import json
 import sqlite3
+import pandas as pd
+import io
 from datetime import datetime
-from flask import Flask, render_template_string, request, jsonify
+from flask import Flask, render_template_string, request, jsonify, send_file
 
 app = Flask(__name__)
 app.secret_key = "pigmi_secure_production_key_2026"
-DB_FILE = "pigmi_data.db"
+
+# Absolute data path configuration ensures durability over application container shifts
+DATA_DIR = os.path.abspath(os.path.dirname(__file__))
+DB_FILE = os.path.join(DATA_DIR, "pigmi_data.db")
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -15,7 +20,9 @@ def init_db():
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         username TEXT UNIQUE,
                         password TEXT,
-                        theme TEXT DEFAULT 'light'
+                        theme TEXT DEFAULT 'light',
+                        biometric_credential_id TEXT,
+                        biometric_public_key TEXT
                      )''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS customers (
                         customer_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,7 +70,6 @@ INDEX_TEMPLATE = """
             --border-color: #dee2e6;
             --card-shadow: 0 4px 12px rgba(0,0,0,0.05);
         }
-        
         [data-theme="dark"] {
             --bg-primary: #121212;
             --bg-secondary: #1e1e1e;
@@ -71,17 +77,11 @@ INDEX_TEMPLATE = """
             --border-color: #333333;
             --card-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
-
         * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-
         body {
-            margin: 0;
-            background-color: var(--bg-secondary);
-            color: var(--text-main);
-            transition: background 0.2s, color 0.2s;
-            -webkit-tap-highlight-color: transparent;
+            margin: 0; background-color: var(--bg-secondary); color: var(--text-main);
+            transition: background 0.2s, color 0.2s; -webkit-tap-highlight-color: transparent;
         }
-
         #splash-screen {
             position: fixed; top:0; left:0; width:100vw; height:100vh;
             background: #ffffff; display: flex; flex-direction: column;
@@ -89,64 +89,42 @@ INDEX_TEMPLATE = """
         }
         .brand-p { font-size: 140px; font-weight: 900; color: #000000; margin: 0; line-height: 1; }
         .red-dot { width: 24px; height: 24px; background-color: var(--accent-red); border-radius: 50%; margin-top: -10px; }
-
         .hidden { display: none !important; }
-        
         input, select, button {
             width: 100%; min-height: 48px; padding: 12px; margin: 8px 0;
             border-radius: 8px; border: 1px solid var(--border-color);
             background: var(--bg-primary); color: var(--text-main); font-size: 16px;
         }
-        button {
-            background-color: var(--text-main); color: var(--bg-primary);
-            border: none; font-weight: 600; cursor: pointer; transition: opacity 0.2s;
-        }
-        button:active { opacity: 0.8; }
-
+        button { background-color: var(--text-main); color: var(--bg-primary); border: none; font-weight: 600; cursor: pointer; }
         #auth-container { max-width: 420px; margin: 10% auto; padding: 30px; }
         .card { background-color: var(--bg-primary); border-radius: 14px; box-shadow: var(--card-shadow); padding: 24px; }
-
         header {
-            position: sticky; top: 0; z-index: 100;
-            background-color: var(--bg-primary); padding: 12px 24px;
-            display: flex; justify-content: space-between; align-items: center;
-            border-bottom: 1px solid var(--border-color);
+            position: sticky; top: 0; z-index: 100; background-color: var(--bg-primary); padding: 12px 24px;
+            display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color);
         }
         .profile-btn { background: none; border: none; cursor: pointer; width: auto; min-height: auto; padding: 0; }
         .mini-p { font-size: 32px; font-weight: 900; color: var(--text-main); margin: 0; line-height: 1; }
         .mini-dot { width: 8px; height: 8px; background-color: var(--accent-red); border-radius: 50%; margin: -2px auto 0 auto; }
-
         .dashboard-grid {
-            max-width: 1200px; margin: 24px auto;
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 20px; padding: 0 16px;
+            max-width: 1200px; margin: 24px auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; padding: 0 16px;
         }
-        .flex-box { cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; border: 1px solid transparent; }
-        .flex-box:hover { transform: translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.1); border-color: var(--border-color); }
-
+        .flex-box { cursor: pointer; transition: transform 0.2s; border: 1px solid transparent; }
+        .flex-box:hover { transform: translateY(-3px); border-color: var(--border-color); }
         .modal {
-            position: fixed; top:0; left:0; width:100vw; height:100vh;
-            background: rgba(0,0,0,0.45); backdrop-filter: blur(4px);
-            display: flex; justify-content: center; align-items: flex-end; z-index: 1000;
+            position: fixed; top:0; left:0; width:100vw; height:100vh; background: rgba(0,0,0,0.45);
+            backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: flex-end; z-index: 1000;
         }
         @media (min-width: 768px) { .modal { align-items: center; } }
-
         .modal-content {
-            background: var(--bg-primary); padding: 24px;
-            border-top-left-radius: 20px; border-top-right-radius: 20px;
+            background: var(--bg-primary); padding: 24px; border-top-left-radius: 20px; border-top-right-radius: 20px;
             width: 100%; max-height: 85vh; overflow-y: auto; position: relative;
         }
-        @media (min-width: 768px) {
-            .modal-content { border-radius: 16px; max-width: 750px; width: 95%; max-height: 80vh; }
-        }
-
+        @media (min-width: 768px) { .modal-content { border-radius: 16px; max-width: 750px; width: 95%; max-height: 80vh; } }
         .close-modal { position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; opacity: 0.6; }
-
         .table-responsive { width: 100%; overflow-x: auto; margin-top: 16px; border-radius: 8px; border: 1px solid var(--border-color); }
         table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
         th, td { padding: 14px; border-bottom: 1px solid var(--border-color); min-width: 110px; }
         th { background-color: var(--bg-secondary); font-weight: 600; position: sticky; top: 0; }
-        
         .action-group { display: flex; gap: 8px; flex-wrap: wrap; }
         .action-group button { width: auto; min-height: 38px; padding: 6px 14px; font-size: 14px; margin: 0; }
     </style>
@@ -205,6 +183,10 @@ INDEX_TEMPLATE = """
             <h4 style="margin:12px 0 4px 0;">Visual Mode Configuration</h4>
             <button onclick="toggleThemeSkin()">Toggle Light / Dark Mode</button>
             
+            <h4 style="margin:20px 0 4px 0;">Biometric Access Authorization</h4>
+            <button onclick="registerBiometrics()" style="background-color: var(--accent-green); color: white;">Link Native Fingerprint Scanner</button>
+            <p id="bio-status" style="font-size:12px; margin-top:4px; opacity:0.7; font-style:italic;"></p>
+
             <h4 style="margin:20px 0 4px 0;">Modify Management Credentials</h4>
             <form id="update-auth-form">
                 <input type="text" id="new-username" placeholder="New Username" required>
@@ -262,6 +244,10 @@ INDEX_TEMPLATE = """
 
         async function openSettings() {
             document.getElementById('settings-modal').classList.remove('hidden');
+            const bioCheck = await fetch('/api/check-bio-registered');
+            const bioData = await bioCheck.json();
+            document.getElementById('bio-status').innerText = bioData.registered ? "🔒 Fingerprint scanner profile actively linked to system configuration." : "⚠️ Biometrics unlinked. Set scanner up before attempt to modify collection data.";
+            
             const res = await fetch('/api/get-trash');
             const records = await res.json();
             const container = document.getElementById('trash-list-container');
@@ -275,6 +261,67 @@ INDEX_TEMPLATE = """
             container.innerHTML = html;
         }
 
+        async function registerBiometrics() {
+            if (!window.PublicKeyCredential) {
+                return alert("Biometric protocols (WebAuthn) are not supported or active on this runtime environment.");
+            }
+            const challenge = new Uint8Array(32);
+            window.crypto.getRandomValues(challenge);
+            const userId = new Uint8Array(16);
+            window.crypto.getRandomValues(userId);
+
+            const options = {
+                publicKey: {
+                    challenge: challenge,
+                    rp: { name: "Pigmi Framework" },
+                    user: { id: userId, name: "manager", displayName: "System Manager" },
+                    pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+                    timeout: 60000,
+                    authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" }
+                }
+            };
+
+            try {
+                const cred = await navigator.credentials.create(options);
+                const rawId = btoa(String.fromCharCode.apply(null, new Uint8Array(cred.rawId)));
+                await fetch('/api/register-bio', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ credential_id: rawId })
+                });
+                alert("Native fingerprint hardware verified and successfully coupled.");
+                openSettings();
+            } catch (err) {
+                alert("Biometric enrollment interrupted: " + err.message);
+            }
+        }
+
+        async function verifyBiometrics() {
+            if (!window.PublicKeyCredential) return false;
+            const res = await fetch('/api/check-bio-registered');
+            const status = await res.json();
+            if (!status.registered) {
+                alert("Verification stopped: Please attach fingerprints first inside configuration profile.");
+                return false;
+            }
+            const challenge = new Uint8Array(32);
+            window.crypto.getRandomValues(challenge);
+            const options = {
+                publicKey: {
+                    challenge: challenge,
+                    timeout: 60000,
+                    userVerification: "required"
+                }
+            };
+            try {
+                await navigator.credentials.get(options);
+                return true;
+            } catch (e) {
+                alert("Biometric match failure: " + e.message);
+                return false;
+            }
+        }
+
         async function toggleThemeSkin() {
             const current = document.body.getAttribute('data-theme');
             const target = current === 'dark' ? 'light' : 'dark';
@@ -286,28 +333,12 @@ INDEX_TEMPLATE = """
             });
         }
 
-        document.getElementById('update-auth-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const res = await fetch('/api/setup-auth', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    u: document.getElementById('new-username').value,
-                    p: document.getElementById('new-password').value
-                })
-            });
-            const data = await res.json();
-            if(data.success) alert("Credentials successfully reconfigured.");
-        });
-
-        // FLEX 1: SYSTEM COLLECTION MATRIX VIEW (FIFO ORDERED)
+        // FLEX 1: SYSTEM COLLECTION MATRIX VIEW
         async function openFlex1() {
             const res = await fetch('/api/get-customers');
             const users = await res.json();
-            
             const logsRes = await fetch('/api/get-todays-logs');
-            const loggedIds = await logsRes.json(); // Array of customer IDs collected today
-
+            const loggedIds = await logsRes.json();
             const todayDate = new Date().toISOString().split('T')[0];
             
             let html = '<span class="close-modal" onclick="closeElement(\\'action-modal\\')">&times;</span>' +
@@ -319,11 +350,8 @@ INDEX_TEMPLATE = """
             users.forEach(u => {
                 let phoneDisplay = u.phone ? u.phone : 'No Phone Link';
                 let isCollected = loggedIds.includes(u.customer_id);
-                
-                let btnStyle = isCollected 
-                    ? 'background-color:#6c757d; color:white;' 
-                    : 'background-color:var(--accent-blue); color:white;';
-                let btnText = isCollected ? 'Edit (Locked 🔒)' : 'Collect';
+                let btnStyle = isCollected ? 'background-color:#ffc107; color:black;' : 'background-color:var(--accent-blue); color:white;';
+                let btnText = isCollected ? 'Modify (🔒 Biometric)' : 'Collect';
                 
                 html += '<tr>' +
                     '<td><strong>' + u.name + '</strong><br><span style="font-size:12px; opacity:0.6;">' + phoneDisplay + '</span></td>' +
@@ -335,21 +363,17 @@ INDEX_TEMPLATE = """
             document.getElementById('action-modal').classList.remove('hidden');
         }
 
-        function launchPaymentPopup(id, name, isCollected) {
+        async function launchPaymentPopup(id, name, isCollected) {
             if (isCollected) {
-                if (!confirm("This record is frozen for today! Scan your fingerprint (biometric bypass) to unlock and edit this collection?")) {
-                    return;
-                }
+                const authorized = await verifyBiometrics();
+                if (!authorized) return;
             }
-
-            const amt = prompt("Enter modern ledger payment amount for " + name + ":", "100");
+            const amt = prompt("Enter payment amount for " + name + ":", "100");
             if (amt === null || amt.trim() === "") return;
             const mode = prompt("Specify Processing Channel (Cash / UPI / Bank):", "Cash");
             if (mode === null || mode.trim() === "") return;
 
-            // Direct route handler logic selector
             const url = isCollected ? '/api/post-collection-override' : '/api/post-collection';
-
             fetch(url, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -358,13 +382,13 @@ INDEX_TEMPLATE = """
             .then(r => r.json())
             .then(data => {
                 if(data.success) {
-                    alert(data.msg || "Collection baseline array posted successfully.");
+                    alert(data.msg || "Collection array posted successfully.");
                     openFlex1();
                 }
             });
         }
 
-        // FLEX 2: PROFILE DIRECTORY EDITOR (FIFO ORDERED)
+        // FLEX 2: PROFILE DIRECTORY EDITOR
         async function openFlex2() {
             const res = await fetch('/api/get-customers');
             const users = await res.json();
@@ -398,7 +422,7 @@ INDEX_TEMPLATE = """
         async function submitNewCustomer() {
             const name = document.getElementById('c-name').value;
             const phone = document.getElementById('c-phone').value;
-            if(!name.trim()) return alert("Valid name metadata payload required.");
+            if(!name.trim()) return alert("Valid name payload required.");
             await fetch('/api/add-customer', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -409,7 +433,7 @@ INDEX_TEMPLATE = """
 
         async function editCustomer(id, oldName, oldPhone) {
             const n = prompt("Edit structural profile name mapping:", oldName);
-            const p = prompt("Edit processing system mobile channel mapping:", oldPhone);
+            const p = prompt("Edit mobile channel mapping:", oldPhone);
             if(!n || !n.trim()) return;
             await fetch('/api/edit-customer', {
                 method: 'POST',
@@ -430,21 +454,26 @@ INDEX_TEMPLATE = """
             }
         }
 
-        // FLEX 3: BALANCE MATRIX RENDERING ENGINE (FIXED STITCH LOGIC)
-        async function openFlex3() {
-            const res = await fetch('/api/get-matrix');
+        // FLEX 3: BALANCE MATRIX RENDERING ENGINE WITH HISTORICAL MONTH PICKER
+        async function openFlex3(selectedTargetMonth = null) {
+            if(!selectedTargetMonth) {
+                const now = new Date();
+                selectedTargetMonth = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, '0');
+            }
+            const res = await fetch('/api/get-matrix?month=' + selectedTargetMonth);
             const data = await res.json();
-            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-            const currentMonthName = monthNames[new Date().getMonth()];
-            const currentYear = new Date().getFullYear();
             
             let html = '<span class="close-modal" onclick="closeElement(\\'action-modal\\')">&times;</span>' +
-                '<h2 style="margin-top:0;">📊 Balance Matrix Overview (' + currentMonthName + ' ' + currentYear + ')</h2>' +
+                '<h2 style="margin-top:0;">📊 Balance Matrix Overview</h2>' +
+                '<div style="margin-bottom:16px;">' +
+                    '<label style="font-size:14px; font-weight:600;">Choose Target Accounting Ledger Period: </label>' +
+                    '<input type="month" id="matrix-month-picker" value="' + selectedTargetMonth + '" onchange="openFlex3(this.value)" style="width:auto; display:inline-block; min-height:38px; margin-left:8px; padding:6px;">' +
+                '</div>' +
                 '<div class="table-responsive">' +
                 '<table id="matrix-table"><thead><tr>';
             
             if(!data.columns || data.columns.length === 0) {
-                html += "<th>No active data profiles registered to the framework.</th></tr></thead></table></div>";
+                html += "<th>No active data profiles match filter selection.</th></tr></thead></table></div>";
                 document.getElementById('action-modal-body').innerHTML = html;
                 return;
             }
@@ -461,20 +490,24 @@ INDEX_TEMPLATE = """
 
             html += '</tbody></table></div>' +
                 '<div style="margin-top:20px; display:grid; grid-template-columns: 1fr 1fr; gap:12px;">' +
-                    '<button onclick="window.location.href=\\'/api/export-excel\\'" style="background-color:var(--accent-green); color:white; margin:0;">Excel Spreadsheet</button>' +
-                    '<button onclick="exportToPDF(\\'' + currentMonthName + '\\', ' + currentYear + ')" style="background-color:var(--accent-red); color:white; margin:0;">Print PDF Report</button>' +
+                    '<button onclick="triggerExcelExport(\\''+selectedTargetMonth+'\\')" style="background-color:var(--accent-green); color:white; margin:0;">Excel Spreadsheet</button>' +
+                    '<button onclick="exportToPDF(\\'' + selectedTargetMonth + '\\')" style="background-color:var(--accent-red); color:white; margin:0;">Print PDF Report</button>' +
                 '</div>';
             
             document.getElementById('action-modal-body').innerHTML = html;
             document.getElementById('action-modal').classList.remove('hidden');
         }
 
-        function exportToPDF(month, year) {
+        function triggerExcelExport(monthStr) {
+            window.location.href = '/api/export-excel?month=' + monthStr;
+        }
+
+        function exportToPDF(monthStr) {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('l', 'pt', 'a4');
-            doc.text("Pigmi Ledger Analytics - " + month + " " + year, 40, 30);
+            doc.text("Pigmi Ledger Analytics Ledger - " + monthStr, 40, 30);
             doc.autoTable({ html: '#matrix-table', styles: { fontSize: 10 }, marginTop: 50 });
-            doc.save("Pigmi_Ledger_" + month + "_" + year + ".pdf");
+            doc.save("Pigmi_Ledger_" + monthStr + ".pdf");
         }
     </script>
 </body>
@@ -495,8 +528,14 @@ def check_auth_state():
 def setup_auth():
     data = request.get_json()
     conn = sqlite3.connect(DB_FILE); c = conn.cursor()
+    c.execute("SELECT biometric_credential_id, biometric_public_key FROM system_config LIMIT 1")
+    existing_bio = c.fetchone()
     c.execute("DELETE FROM system_config")
-    c.execute("INSERT INTO system_config (username, password) VALUES (?, ?)", (data['u'], data['p']))
+    if existing_bio:
+        c.execute("INSERT INTO system_config (username, password, biometric_credential_id, biometric_public_key) VALUES (?, ?, ?, ?)",
+                  (data['u'], data['p'], existing_bio[0], existing_bio[1]))
+    else:
+        c.execute("INSERT INTO system_config (username, password) VALUES (?, ?)", (data['u'], data['p']))
     conn.commit(); conn.close()
     return jsonify({"success": True})
 
@@ -507,7 +546,7 @@ def login_auth():
     c.execute("SELECT theme FROM system_config WHERE username=? AND password=?", (data['u'], data['p']))
     row = c.fetchone(); conn.close()
     if row: return jsonify({"success": True, "theme": row[0]})
-    return jsonify({"success": False, "msg": "Invalid structural credential data input."})
+    return jsonify({"success": False, "msg": "Invalid credential data input."})
 
 @app.route('/api/save-theme', methods=['POST'])
 def save_theme():
@@ -517,7 +556,21 @@ def save_theme():
     conn.commit(); conn.close()
     return jsonify({"success": True})
 
-# FIX: GET CUSTOMERS FOLLOWS STRICT FIRST-IN, FIRST-OUT ORDERING BY ID
+@app.route('/api/check-bio-registered')
+def check_bio_registered():
+    conn = sqlite3.connect(DB_FILE); c = conn.cursor()
+    c.execute("SELECT biometric_credential_id FROM system_config WHERE biometric_credential_id IS NOT NULL")
+    row = c.fetchone(); conn.close()
+    return jsonify({"registered": True if row else False})
+
+@app.route('/api/register-bio', methods=['POST'])
+def register_bio():
+    data = request.get_json()
+    conn = sqlite3.connect(DB_FILE); c = conn.cursor()
+    c.execute("UPDATE system_config SET biometric_credential_id=?", (data['credential_id'],))
+    conn.commit(); conn.close()
+    return jsonify({"success": True})
+
 @app.route('/api/get-customers')
 def get_customers():
     conn = sqlite3.connect(DB_FILE); conn.row_factory = sqlite3.Row; c = conn.cursor()
@@ -586,7 +639,7 @@ def post_collection():
     c.execute("INSERT INTO collections (customer_id, date, amount, mode) VALUES (?, ?, ?, ?)",
               (data['id'], today, float(data['amount']), data['mode']))
     conn.commit(); conn.close()
-    return jsonify({"success": True, "msg": "Collection baseline array posted successfully."})
+    return jsonify({"success": True, "msg": "Collection posted successfully."})
 
 @app.route('/api/post-collection-override', methods=['POST'])
 def post_collection_override():
@@ -595,13 +648,16 @@ def post_collection_override():
     c.execute("UPDATE collections SET amount=?, mode=? WHERE customer_id=? AND date=?",
               (float(data['amount']), data['mode'], data['id'], today))
     conn.commit(); conn.close()
-    return jsonify({"success": True, "msg": "Biometric hardware signature matches. Lock overridden safely."})
+    return jsonify({"success": True, "msg": "Biometric validation passed. Entry safely amended."})
 
-def build_pandas_matrix():
-    import pandas as pd
+def build_pandas_matrix(target_month=None):
+    if not target_month:
+        target_month = datetime.now().strftime("%Y-%m")
+    
     conn = sqlite3.connect(DB_FILE)
     df_cust = pd.read_sql_query("SELECT customer_id, name FROM customers ORDER BY customer_id ASC", conn)
-    df_coll = pd.read_sql_query("SELECT customer_id, date, amount FROM collections", conn)
+    # Filter transactional logs to fit the targeted month format match (YYYY-MM-DD starts with YYYY-MM)
+    df_coll = pd.read_sql_query(f"SELECT customer_id, date, amount FROM collections WHERE date LIKE '{target_month}%'", conn)
     conn.close()
     
     if df_cust.empty: return pd.DataFrame()
@@ -617,28 +673,26 @@ def build_pandas_matrix():
     matrix['Monthly Total'] = matrix[date_cols].sum(axis=1)
     matrix = matrix.drop(columns=['customer_id'])
     
-    # Generate vertical sums row for the dashboard matrix grid
     total_row = {col: matrix[col].sum() if col != 'name' else 'Daily Total Sum' for col in matrix.columns}
     matrix = pd.concat([matrix, pd.DataFrame([total_row])], ignore_index=True)
     return matrix
 
 @app.route('/api/get-matrix')
 def get_matrix_json():
-    df = build_pandas_matrix()
+    target_month = request.args.get('month')
+    df = build_pandas_matrix(target_month)
     if df.empty: return jsonify({"columns": [], "data": []})
     return jsonify({"columns": list(df.columns), "data": df.values.tolist()})
 
 @app.route('/api/export-excel')
 def export_excel():
-    import io; from flask import send_file
-    df = build_pandas_matrix()
-    current_month_str = datetime.now().strftime("%B_%Y")
+    target_month = request.args.get('month')
+    df = build_pandas_matrix(target_month)
     output = io.BytesIO()
     if not df.empty:
-        with io.BytesIO() as output:
-            df.to_excel(output, index=False, sheet_name='Pigmi Monthly Ledger')
-            output.seek(0)
-            return send_file(io.BytesIO(output.read()), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"Pigmi_Ledger_{current_month_str}.xlsx")
+        df.to_excel(output, index=False, sheet_name='Pigmi Monthly Ledger')
+        output.seek(0)
+        return send_file(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"Pigmi_Ledger_{target_month}.xlsx")
     return jsonify({"error": "Empty set"})
 
 if __name__ == '__main__':
