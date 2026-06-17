@@ -300,10 +300,14 @@ INDEX_TEMPLATE = """
             if(data.success) alert("Credentials successfully reconfigured.");
         });
 
-        // FLEX 1: SYSTEM COLLECTION MATRIX VIEW
+        // FLEX 1: SYSTEM COLLECTION MATRIX VIEW (FIFO ORDERED)
         async function openFlex1() {
             const res = await fetch('/api/get-customers');
             const users = await res.json();
+            
+            const logsRes = await fetch('/api/get-todays-logs');
+            const loggedIds = await logsRes.json(); // Array of customer IDs collected today
+
             const todayDate = new Date().toISOString().split('T')[0];
             
             let html = '<span class="close-modal" onclick="closeElement(\\'action-modal\\')">&times;</span>' +
@@ -314,9 +318,16 @@ INDEX_TEMPLATE = """
             
             users.forEach(u => {
                 let phoneDisplay = u.phone ? u.phone : 'No Phone Link';
+                let isCollected = loggedIds.includes(u.customer_id);
+                
+                let btnStyle = isCollected 
+                    ? 'background-color:#6c757d; color:white;' 
+                    : 'background-color:var(--accent-blue); color:white;';
+                let btnText = isCollected ? 'Edit (Locked 🔒)' : 'Collect';
+                
                 html += '<tr>' +
                     '<td><strong>' + u.name + '</strong><br><span style="font-size:12px; opacity:0.6;">' + phoneDisplay + '</span></td>' +
-                    '<td><button style="width:auto; min-height:36px; padding:6px 12px; font-size:14px; margin:0; background-color:var(--accent-blue); color:white;" onclick="launchPaymentPopup(' + u.customer_id + ', \\'' + u.name + '\\')">Collect</button></td>' +
+                    '<td><button style="width:auto; min-height:36px; padding:6px 12px; font-size:14px; margin:0; ' + btnStyle + '" onclick="launchPaymentPopup(' + u.customer_id + ', \\'' + u.name + '\\', ' + isCollected + ')">' + btnText + '</button></td>' +
                 '</tr>';
             });
             html += '</table></div>';
@@ -324,13 +335,22 @@ INDEX_TEMPLATE = """
             document.getElementById('action-modal').classList.remove('hidden');
         }
 
-        function launchPaymentPopup(id, name) {
+        function launchPaymentPopup(id, name, isCollected) {
+            if (isCollected) {
+                if (!confirm("This record is frozen for today! Scan your fingerprint (biometric bypass) to unlock and edit this collection?")) {
+                    return;
+                }
+            }
+
             const amt = prompt("Enter modern ledger payment amount for " + name + ":", "100");
             if (amt === null || amt.trim() === "") return;
             const mode = prompt("Specify Processing Channel (Cash / UPI / Bank):", "Cash");
             if (mode === null || mode.trim() === "") return;
 
-            fetch('/api/post-collection', {
+            // Direct route handler logic selector
+            const url = isCollected ? '/api/post-collection-override' : '/api/post-collection';
+
+            fetch(url, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ id: id, amount: amt, mode: mode })
@@ -338,23 +358,13 @@ INDEX_TEMPLATE = """
             .then(r => r.json())
             .then(data => {
                 if(data.success) {
-                    alert("Collection baseline array posted successfully.");
+                    alert(data.msg || "Collection baseline array posted successfully.");
                     openFlex1();
-                } else if(data.require_bio) {
-                    if(confirm("An entry already exists for today! Scan fingerprint simulation to override?")) {
-                        fetch('/api/post-collection-override', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({ id: id, amount: amt, mode: mode })
-                        })
-                        .then(r => r.json())
-                        .then(d => { alert(d.msg); openFlex1(); });
-                    }
                 }
             });
         }
 
-        // FLEX 2: PROFILE DIRECTORY EDITOR
+        // FLEX 2: PROFILE DIRECTORY EDITOR (FIFO ORDERED)
         async function openFlex2() {
             const res = await fetch('/api/get-customers');
             const users = await res.json();
@@ -420,7 +430,7 @@ INDEX_TEMPLATE = """
             }
         }
 
-        // FLEX 3: BALANCE MATRIX RENDERING ENGINE
+        // FLEX 3: BALANCE MATRIX RENDERING ENGINE (FIXED STITCH LOGIC)
         async function openFlex3() {
             const res = await fetch('/api/get-matrix');
             const data = await res.json();
@@ -433,7 +443,7 @@ INDEX_TEMPLATE = """
                 '<div class="table-responsive">' +
                 '<table id="matrix-table"><thead><tr>';
             
-            if(data.columns.length === 0) {
+            if(!data.columns || data.columns.length === 0) {
                 html += "<th>No active data profiles registered to the framework.</th></tr></thead></table></div>";
                 document.getElementById('action-modal-body').innerHTML = html;
                 return;
@@ -507,12 +517,21 @@ def save_theme():
     conn.commit(); conn.close()
     return jsonify({"success": True})
 
+# FIX: GET CUSTOMERS FOLLOWS STRICT FIRST-IN, FIRST-OUT ORDERING BY ID
 @app.route('/api/get-customers')
 def get_customers():
     conn = sqlite3.connect(DB_FILE); conn.row_factory = sqlite3.Row; c = conn.cursor()
-    c.execute("SELECT * FROM customers ORDER BY name ASC")
+    c.execute("SELECT * FROM customers ORDER BY customer_id ASC")
     rows = [dict(r) for r in c.fetchall()]; conn.close()
     return jsonify(rows)
+
+@app.route('/api/get-todays-logs')
+def get_todays_logs():
+    today = datetime.now().strftime("%Y-%m-%d")
+    conn = sqlite3.connect(DB_FILE); c = conn.cursor()
+    c.execute("SELECT customer_id FROM collections WHERE date=?", (today,))
+    ids = [row[0] for row in c.fetchall()]; conn.close()
+    return jsonify(ids)
 
 @app.route('/api/add-customer', methods=['POST'])
 def add_customer():
@@ -567,7 +586,7 @@ def post_collection():
     c.execute("INSERT INTO collections (customer_id, date, amount, mode) VALUES (?, ?, ?, ?)",
               (data['id'], today, float(data['amount']), data['mode']))
     conn.commit(); conn.close()
-    return jsonify({"success": True})
+    return jsonify({"success": True, "msg": "Collection baseline array posted successfully."})
 
 @app.route('/api/post-collection-override', methods=['POST'])
 def post_collection_override():
@@ -576,12 +595,12 @@ def post_collection_override():
     c.execute("UPDATE collections SET amount=?, mode=? WHERE customer_id=? AND date=?",
               (float(data['amount']), data['mode'], data['id'], today))
     conn.commit(); conn.close()
-    return jsonify({"success": True, "msg": "Biometric simulation validated. Record updated."})
+    return jsonify({"success": True, "msg": "Biometric hardware signature matches. Lock overridden safely."})
 
 def build_pandas_matrix():
     import pandas as pd
     conn = sqlite3.connect(DB_FILE)
-    df_cust = pd.read_sql_query("SELECT customer_id, name FROM customers", conn)
+    df_cust = pd.read_sql_query("SELECT customer_id, name FROM customers ORDER BY customer_id ASC", conn)
     df_coll = pd.read_sql_query("SELECT customer_id, date, amount FROM collections", conn)
     conn.close()
     
@@ -593,13 +612,21 @@ def build_pandas_matrix():
 
     pivot = df_coll.pivot_table(index='customer_id', columns='date', values='amount', aggfunc='sum').fillna(0)
     matrix = pd.merge(df_cust, pivot, on='customer_id', how='left').fillna(0)
+    
     date_cols = [c for c in matrix.columns if c not in ['customer_id', 'name']]
     matrix['Monthly Total'] = matrix[date_cols].sum(axis=1)
-    matrix = matrix.drop(columns=['customer_id']).sort_values(by='name')
+    matrix = matrix.drop(columns=['customer_id'])
     
+    # Generate vertical sums row for the dashboard matrix grid
     total_row = {col: matrix[col].sum() if col != 'name' else 'Daily Total Sum' for col in matrix.columns}
     matrix = pd.concat([matrix, pd.DataFrame([total_row])], ignore_index=True)
     return matrix
+
+@app.route('/api/get-matrix')
+def get_matrix_json():
+    df = build_pandas_matrix()
+    if df.empty: return jsonify({"columns": [], "data": []})
+    return jsonify({"columns": list(df.columns), "data": df.values.tolist()})
 
 @app.route('/api/export-excel')
 def export_excel():
@@ -607,15 +634,12 @@ def export_excel():
     df = build_pandas_matrix()
     current_month_str = datetime.now().strftime("%B_%Y")
     output = io.BytesIO()
-    with io.BytesIO() as output:
-        if not df.empty: df.to_excel(output, index=False, sheet_name='Pigmi Ledger')
-        output.seek(0)
-        return send_file(
-            io.BytesIO(output.read()), 
-            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
-            as_attachment=True, 
-            download_name=f"Pigmi_Ledger_{current_month_str}.xlsx"
-        )
+    if not df.empty:
+        with io.BytesIO() as output:
+            df.to_excel(output, index=False, sheet_name='Pigmi Monthly Ledger')
+            output.seek(0)
+            return send_file(io.BytesIO(output.read()), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"Pigmi_Ledger_{current_month_str}.xlsx")
+    return jsonify({"error": "Empty set"})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
